@@ -1,6 +1,7 @@
 ﻿namespace RabbitMQ.Consumer
 {
     using System;
+    using System.Threading;
     using RabbitMQ.Library;
     using Microsoft.Extensions.Configuration;
 
@@ -23,11 +24,21 @@
                 rabbitMQConfiguration.QueueName
             );
 
-            while (true) //infinite loop
+            bool mainLoopActive = true;
+            int messageCount = 0;
+
+            while (mainLoopActive) //infinite loop
             {
                 var message = rabbitMqClient.Get();
-                Console.WriteLine($"Received message | {message.MessageId}: {message.Content}.");
-                if (message.Equals("end.")) break;
+                
+                if ( message != default(SampleMessage) )
+                {
+                    messageCount++;
+                    Console.WriteLine($"Received message ({messageCount}) | {message.MessageId}: {message.Content}.");
+                    if (message.Content.Equals("end.")) mainLoopActive = false;
+                }
+
+                Thread.Sleep(10);
             }
 
             Console.WriteLine("End consuming messages.");

@@ -1,17 +1,16 @@
 ﻿namespace RabbitMQ.Library
 {
     using System.Text;
-    using System.Threading;
-    using RabbitMQ.Client;
-    using RabbitMQ.Client.Events;
     using Newtonsoft.Json;
+    using RabbitMQ.Client;
 
     public class Client<T>
     {
-        private ConnectionFactory _factory = null;
-        private IConnection _connection = null;
-        private IModel _channel = null;
-        private string _queueName = null;
+        private readonly ConnectionFactory _factory = null;
+        private readonly IConnection _connection = null;
+        private readonly IModel _channel = null;
+        private readonly IBasicProperties _properties = null;
+        private readonly string _queueName = null;
 
         public Client(string hostname, string virtualhost, string username, string password, string queueName)
         {
@@ -19,6 +18,9 @@
             _connection = _factory.CreateConnection();
             _channel = _connection.CreateModel();
             _queueName = queueName;
+
+            _properties = _channel.CreateBasicProperties();
+            _properties.Persistent = true;
 
             _channel.QueueDeclare
             (
@@ -47,28 +49,23 @@
             (
                 exchange: "",
                 routingKey: _queueName,
-                basicProperties: null,
+                basicProperties: _properties,
                 body: jsonMessage
             );
         }
 
         public T Get()
-        {
-            var consumer = new EventingBasicConsumer(_channel);
+        {       
             T returnMessage = default;
+                
+            var queueMessage = _channel.BasicGet(_queueName, false);
 
-            consumer.Received += (model, ea) =>
-            {
-                var body = ea.Body.Span;
-                returnMessage = JsonConvert.DeserializeObject<T>(Encoding.UTF8.GetString(body));
-            };
+            if (queueMessage == null)
+                return returnMessage;
 
-            _channel.BasicConsume(queue: _queueName,
-                                 autoAck: true,
-                                 consumer: consumer);
-
-            while (returnMessage == null)
-                Thread.Sleep(10);
+            returnMessage = JsonConvert.DeserializeObject<T>(Encoding.UTF8.GetString(queueMessage.Body.Span));
+            
+            _channel.BasicAck(queueMessage.DeliveryTag, false);
 
             return returnMessage;
         }
